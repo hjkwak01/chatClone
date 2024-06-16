@@ -25,6 +25,14 @@ wsServer.on("connection", (socket) => {
     done();
     socket.to(roomName).emit("welcome");
   });
+  // NOTE 클라이언트과 서버와 연결이 끊어지기 전에 bye 메세지 전송
+  socket.on("disconnecting", () => {
+    socket.rooms.forEach((room) => socket.to(room).emit("bye"));
+  });
+  socket.on("new_message", (msg, room, done) => {
+    socket.to(room).emit("new_message", msg);
+    done();
+  });
 });
 
 const handleListen = () => console.log(`Listening on http://localhost:3000`);
