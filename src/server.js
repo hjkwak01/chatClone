@@ -19,16 +19,20 @@ const wsServer = new Server(httpServer);
 function publicRooms() {
   const {
     sockets: {
-      adapter: {sids, rooms},
+      adapter: { sids, rooms },
     },
   } = wsServer;
   const publicRooms = [];
   rooms.forEach((_, key) => {
-    if(sids.get(key) === undefined) {
+    if (sids.get(key) === undefined) {
       publicRooms.push(key);
     }
   });
   return publicRooms;
+}
+
+function countRoom(roomName) {
+  return wsServer.sockets.adapter.rooms.get(roomName)?.size;
 }
 
 wsServer.on("connection", (socket) => {
@@ -40,19 +44,17 @@ wsServer.on("connection", (socket) => {
     socket.join(roomName);
     done();
     // NOTE 하나의 소켓에만 메세지를 보냄
-    socket.to(roomName).emit("welcome", socket.nickname);
+    socket.to(roomName).emit("welcome", socket.nickname, countRoom(roomName));
     // NOTE 모든 소켓에 메세지를 보냄
     wsServer.sockets.emit("room_change", publicRooms());
   });
   socket.on("disconnecting", () => {
-    socket.rooms.forEach((room) =>
-      socket.to(room).emit("bye", socket.nickname)
-    );
+    socket.rooms.forEach((room) => socket.to(room).emit("bye", socket.nickname, countRoom(room) - 1));
   });
 
   socket.on("disconnect", () => {
     wsServer.sockets.emit("room_change", publicRooms());
-  })
+  });
   socket.on("new_message", (msg, room, done) => {
     socket.to(room).emit("new_message", `${socket.nickname}: ${msg}`);
     done();
