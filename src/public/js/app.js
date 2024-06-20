@@ -1,6 +1,7 @@
 const socket = io();
 // 웹/앱 카메라 연동(전면, 후면)
 const myFace = document.getElementById("myFace");
+const peerFace = document.getElementById("peerFace");
 const muteBtn = document.getElementById("mute");
 const cameraBtn = document.getElementById("camera");
 const camerasSelect = document.getElementById("cameras");
@@ -14,6 +15,7 @@ let muted = false;
 let cameraOff = false;
 let roomName;
 let myPeerConnection;
+let myDataChannel;
 
 async function getCameras() {
   try {
@@ -54,8 +56,8 @@ async function getMedia(deviceId) {
   }
 }
 
-function handleMuteClick() {
-  myStream.getAudioTracks().forEach((track) => (track.enabled = !track.enabled));
+async function handleMuteClick() {
+  await myStream.getAudioTracks().forEach((track) => track.enabled = !track.enabled);
   if (!muted) {
     muteBtn.innerText = "Unmute";
     muted = true;
@@ -97,7 +99,7 @@ async function initCall() {
   welcome.hidden = true;
   call.hidden = false;
   await getMedia();
-  makeConnection();
+  await makeConnection();
 }
 
 async function handleWelcomeSubmit(event) {
@@ -114,6 +116,9 @@ welcomeForm.addEventListener("submit", handleWelcomeSubmit);
 // Socket Code
 
 socket.on("welcome", async () => {
+  myDataChannel = myPeerConnection.createDataChannel("chat");
+  myDataChannel.addEventListener("message", (event) => console.log(event.data));
+  console.log("made data channel");
   const offer = await myPeerConnection.createOffer();
   myPeerConnection.setLocalDescription(offer);
   console.log("sent the offer");
@@ -121,6 +126,12 @@ socket.on("welcome", async () => {
 });
 
 socket.on("offer", async (offer) => {
+  myPeerConnection.addEventListener("datachannel", (event) => {
+    myDataChannel = event.channel;
+    myDataChannel.addEventListener("message", (event) =>
+      console.log(event.data)
+    );
+  });
   console.log("received the offer");
   myPeerConnection.setRemoteDescription(offer);
   const answer = await myPeerConnection.createAnswer();
@@ -141,19 +152,21 @@ socket.on("ice", (ice) => {
 
 // RTC Code
 
-function makeConnection() {
+async function makeConnection() {
   // myPeerConnection = new RTCPeerConnection();
   myPeerConnection = new RTCPeerConnection({
     iceServers: [
       {
-        urls: [{ urls: "turns:freeturn.tel:5349", username: "free", credential: "free" }],
-      },
+        url: 'turn:turn.anyfirewall.com:443?transport=tcp',
+        credential: 'webrtc',
+        username: 'webrtc'
+      }
     ],
   });
   myPeerConnection.addEventListener("icecandidate", handleIce);
-  myPeerConnection.addEventListener("addstream", handleAddStream);
-  // myPeerConnection.addEventListener("track", handleTrack);
-  myStream.getTracks().forEach((track) => myPeerConnection.addTrack(track, myStream));
+  // myPeerConnection.addEventListener("addstream", handleAddStream);
+  myPeerConnection.addEventListener("addstream", handleTrack);
+  await myStream.getTracks().forEach((track) => myPeerConnection.addTrack(track, myStream));
 }
 
 function handleIce(data) {
@@ -162,12 +175,12 @@ function handleIce(data) {
 }
 
 function handleAddStream(data) {
-  const peerFace = document.getElementById("peerFace");
   peerFace.srcObject = data.stream;
 }
 
 function handleTrack(data) {
   console.log("handle track");
-  const peerFace = document.querySelector("#peerFace");
-  peerFace.srcObject = data.streams[0];
+  // const peerFace = document.getElementById("peerFace");
+  // peerFace.srcObject = data.streams[0];
+  peerFace.srcObject = data.stream;
 }
